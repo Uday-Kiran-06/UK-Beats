@@ -5,6 +5,7 @@ import { StorageService } from '../services/StorageService';
 import { MusicAPI } from '../services/api';
 import { PlayerContext } from './PlayerContextSource';
 import { PlayerProgressContext } from './PlayerProgressContextSource';
+import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
 
 export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [currentSong, setCurrentSong] = useState<Song | null>(null);
@@ -52,6 +53,27 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
 
     const releaseWakeLock = () => {
+        releaseWakeLockRef();
+    };
+
+    const startForegroundService = async (song: Song) => {
+        try {
+            await ForegroundService.startForegroundService({
+                id: 12345,
+                title: song.name,
+                body: song.primaryArtists,
+                smallIcon: 'push_icon'
+            });
+        } catch (e) { console.error("Foreground Service failed", e); }
+    };
+
+    const stopForegroundService = async () => {
+        try {
+            await ForegroundService.stopForegroundService();
+        } catch (e) { }
+    };
+
+    const releaseWakeLockRef = () => {
         wakeLockRef.current?.release().catch(() => { });
         wakeLockRef.current = null;
     };
@@ -143,6 +165,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 .then(() => {
                     setIsPlaying(true);
                     acquireWakeLock();
+                    startForegroundService(finalSong);
                 })
                 .catch(err => {
                     console.error("Playback failed after fetch:", err);
@@ -336,9 +359,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (isPlaying) {
             audioRef.current.pause();
             releaseWakeLock();
+            stopForegroundService();
         } else {
             audioRef.current.play();
             acquireWakeLock();
+            if (stateRef.current.currentSong) startForegroundService(stateRef.current.currentSong);
         }
         setIsPlaying(!isPlaying);
     };

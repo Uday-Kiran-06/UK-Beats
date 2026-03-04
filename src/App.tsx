@@ -13,6 +13,8 @@ import SettingsView from './components/SettingsView';
 import PlaylistManager from './components/PlaylistManager';
 import PlaylistDetailView from './components/PlaylistDetailView';
 import { App as CapApp } from '@capacitor/app';
+import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
+import { Device } from '@capacitor/device';
 import './App.css';
 import './Search.css';
 
@@ -132,24 +134,29 @@ function App() {
     }, 500); // 500ms debounce
   };
 
-  // --- NATIVE BACK BUTTON HANDLER (Capacitor) ---
+  // --- NATIVE BACKGROUND & FOREGROUND SERVICE ---
   useEffect(() => {
+    const initNativeSupport = async () => {
+      try {
+        const info = await Device.getInfo();
+        if (info.platform === 'android') {
+          // Verify service availability
+          await ForegroundService.stopForegroundService().catch(() => { });
+          console.log("Native Android detected. Hardware back-button and background service ready.");
+        }
+      } catch (e) { }
+    };
+    initNativeSupport();
+
     const handleBackButton = async () => {
-      // If we are not on Home, navigate to Home
       if (currentView !== 'home') {
         setCurrentView('home');
         setSearchQuery('');
         return;
       }
-      // If we ARE on Home, we can decide to minimize or do nothing.
-      // Usually, we want to prevent closure while music plays.
     };
-
     const listener = CapApp.addListener('backButton', handleBackButton);
-
-    return () => {
-      listener.then(l => l.remove());
-    };
+    return () => { listener.then(l => l.remove()); };
   }, [currentView]);
 
   // --- PERSISTENT HISTORY GUARD (Legacy PWA Support) ---
