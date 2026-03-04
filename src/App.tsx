@@ -50,6 +50,12 @@ function App() {
   const observerTarget = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Initial history guard: push a dummy state so the first 'back' swipe stays in app
+    if (window.history.state?.isUkBeatsRoot !== true) {
+      window.history.replaceState({ isUkBeatsRoot: true }, '');
+      window.history.pushState({ isUkBeatsApp: true }, '');
+    }
+
     // Fetch initial trending data and other modules
     MusicAPI.getTrending().then((res: any) => {
       if (res?.status === 'SUCCESS' && res.data) {
@@ -114,12 +120,16 @@ function App() {
   // --- MOBILE BACK BUTTON PERSISTENCE ---
   useEffect(() => {
     const handlePopState = () => {
-      // If we are not on home, hitting back should take us home
+      // If we are on a sub-view, back always goes to home
       if (currentView !== 'home') {
         setCurrentView('home');
         setSearchQuery('');
-        // Maintain a dummy entry in history so the NEXT back press can also be intercepted
-        window.history.pushState(null, '', window.location.pathname);
+        // Re-push app state to keep the guard alive
+        window.history.pushState({ isUkBeatsApp: true }, '', window.location.pathname);
+      } else {
+        // If we are on home and they hit back, we re-push to prevent app exit
+        // unless they hit back twice very fast (standard Android behavior)
+        window.history.pushState({ isUkBeatsApp: true }, '', window.location.pathname);
       }
     };
 
@@ -128,10 +138,12 @@ function App() {
   }, [currentView]);
 
   useEffect(() => {
+    // When navigating to subviews, ensure we have a pushState history entry
     if (currentView !== 'home') {
-      window.history.pushState({ view: currentView }, '', window.location.pathname);
+      window.history.pushState({ view: currentView, isUkBeatsApp: true }, '', window.location.pathname);
     }
   }, [currentView]);
+  // ----------------------------------------
 
   useEffect(() => {
     const observer = new IntersectionObserver(

@@ -69,9 +69,36 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             : undefined;
 
         if (audioRef.current && audioUrl) {
+            // Set audio attributes for OS detection
+            audioRef.current.title = finalSong.name;
             audioRef.current.src = audioUrl;
+            audioRef.current.preload = "auto";
+
+            // Update Media Session Metadata Immediately for responsiveness
+            if ('mediaSession' in navigator) {
+                const artistName = finalSong.primaryArtists || 'Unknown Artist';
+                const imageArr = Array.isArray(finalSong.image) ? finalSong.image : [];
+                const artworks = imageArr.map(img => ({
+                    src: img.link,
+                    sizes: img.quality === '500x500' ? '500x500' : (img.quality === '150x150' ? '150x150' : '50x50'),
+                    type: 'image/jpeg'
+                }));
+
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: finalSong.name,
+                    artist: artistName,
+                    album: finalSong.album?.name || 'UK-Beats',
+                    artwork: artworks,
+                });
+            }
+
             audioRef.current.play()
-                .then(() => setIsPlaying(true))
+                .then(() => {
+                    setIsPlaying(true);
+                    if ('mediaSession' in navigator) {
+                        navigator.mediaSession.playbackState = 'playing';
+                    }
+                })
                 .catch(err => console.error("Playback failed", err));
         }
     };
@@ -163,7 +190,21 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const audio = audioRef.current;
 
         const updateProgress = () => {
-            setProgress(audio.currentTime);
+            const currentTime = audio.currentTime;
+            setProgress(currentTime);
+
+            // Synchronize MediaSession position
+            if ('mediaSession' in navigator && audio.duration && isFinite(audio.duration)) {
+                try {
+                    navigator.mediaSession.setPositionState?.({
+                        duration: audio.duration,
+                        playbackRate: audio.playbackRate,
+                        position: currentTime
+                    });
+                } catch (e) {
+                    // Silently fail if state is invalid (e.g. during seek)
+                }
+            }
         };
 
         const handleEnded = () => {
