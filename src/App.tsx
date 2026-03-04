@@ -46,20 +46,29 @@ function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => StorageService.getProfile());
   const [customPlaylists, setCustomPlaylists] = useState<Playlist[]>(() => StorageService.getPlaylists());
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+  const [logoTaps, setLogoTaps] = useState(0);
   const searchTimeout = useRef<number | null>(null);
   const observerTarget = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Initial history guard: push a dummy state so the first 'back' swipe stays in app
-    if (window.history.state?.isUkBeatsRoot !== true) {
-      window.history.replaceState({ isUkBeatsRoot: true }, '');
-      window.history.pushState({ isUkBeatsApp: true }, '');
-    }
+    // --- GLOBAL AUDIO UNLOCKER ---
+    // Mobile browsers block audio until a synchronous play() call is made on a user gesture.
+    const unlockAudio = () => {
+      const audio = document.getElementById('uk-beats-audio') as HTMLAudioElement;
+      if (audio) {
+        // Play and immediately pause to "unlock" the element for future async play() calls
+        audio.play().then(() => audio.pause()).catch(() => { });
+        window.removeEventListener('touchstart', unlockAudio);
+        window.removeEventListener('click', unlockAudio);
+      }
+    };
+    window.addEventListener('touchstart', unlockAudio);
+    window.addEventListener('click', unlockAudio);
 
     // Fetch initial trending data and other modules
     MusicAPI.getTrending().then((res: any) => {
       if (res?.status === 'SUCCESS' && res.data) {
-        // Normalize songs since /modules returns primaryArtists as array of objects
         if (Array.isArray(res.data.trending?.songs)) setTrending(res.data.trending.songs.map(normalizeSong));
         if (Array.isArray(res.data.albums)) setNewAlbums(res.data.albums);
         if (Array.isArray(res.data.playlists)) setFeaturedPlaylists(res.data.playlists);
@@ -68,6 +77,11 @@ function App() {
     }).catch(err => {
       console.error("Dashboard data load failed:", err);
     });
+
+    return () => {
+      window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('click', unlockAudio);
+    };
   }, []);
 
   // Fetch from Supabase Cloud on Login / App Load
@@ -118,23 +132,21 @@ function App() {
   };
 
   // --- PERSISTENT HISTORY GUARD (Double Guardian) ---
-  // We use a base anchor state and a current guardian state.
-  // Any back-swipe triggers a pop to 'base', which we catch and re-push 'guardian'.
   useEffect(() => {
-    // Initial anchor
-    if (!window.history.state || window.history.state.type !== 'guardian') {
+    // We strictly use a base and guardian state. 
+    // If the browser pops to 'base', it means the user swiped back from the app root.
+    if (!window.history.state || (window.history.state.type !== 'guardian' && window.history.state.type !== 'base')) {
       window.history.replaceState({ type: 'base' }, '');
       window.history.pushState({ type: 'guardian' }, '');
     }
 
     const handlePopState = (event: PopStateEvent) => {
-      // If we popped to the base state or out of the app, push back immediately
-      if (!event.state || event.state.type !== 'guardian') {
+      // If we land on 'base' or something unknown, push back to 'guardian' immediately
+      if (!event.state || event.state.type === 'base') {
         if (currentView !== 'home') {
           setCurrentView('home');
           setSearchQuery('');
         }
-        // Force the user to stay in the app's 'guardian' state
         window.history.pushState({ type: 'guardian' }, '');
       }
     };
@@ -318,23 +330,33 @@ function App() {
 
   return (
     <div className={`app-container ${theme}-theme`}>
-      <Sidebar onNavigate={(view, playlistId, title) => {
-        if (view === 'home') {
-          setSearchQuery('');
-          setCurrentView('home');
-        } else if (view === 'search') {
-          document.querySelector<HTMLInputElement>('.search-bar input')?.focus();
-        } else if (view === 'playlist' && playlistId) {
-          loadPlaylist(playlistId, title || 'Playlist');
-        } else if (view === 'settings') {
-          setSearchQuery('');
-          setCurrentView('settings');
-        } else if (view === 'my-playlists') {
-          setSearchQuery('');
-          setCurrentView('my-playlists');
-          setCustomPlaylists(StorageService.getPlaylists());
-        }
-      }} />
+      <Sidebar
+        onLogoClick={() => {
+          const newTaps = logoTaps + 1;
+          setLogoTaps(newTaps);
+          if (newTaps >= 5) {
+            setShowDebug(true);
+            setLogoTaps(0);
+          }
+        }}
+        onNavigate={(view, playlistId, title) => {
+          if (view === 'home') {
+            setSearchQuery('');
+            setCurrentView('home');
+          } else if (view === 'search') {
+            document.querySelector<HTMLInputElement>('.search-bar input')?.focus();
+          } else if (view === 'playlist' && playlistId) {
+            loadPlaylist(playlistId, title || 'Playlist');
+          } else if (view === 'settings') {
+            setSearchQuery('');
+            setCurrentView('settings');
+          } else if (view === 'my-playlists') {
+            setSearchQuery('');
+            setCurrentView('my-playlists');
+            setCustomPlaylists(StorageService.getPlaylists());
+          }
+        }}
+      />
       <main className="main-content">
         <header className="topbar">
           <div className="search-bar">
@@ -358,6 +380,30 @@ function App() {
             </div>
           </div>
         </header>
+
+        {showDebug && (
+          <div className="debug-overlay glass-panel" style={{
+            position: 'fixed', top: '80px', right: '20px', zIndex: 9999,
+            padding: '16px', fontSize: '12px', color: '#fff',
+            maxHeight: '70vh', overflowY: 'auto', width: '280px',
+            border: '2px solid var(--accent-primary)', boxShadow: '0 0 20px rgba(0,0,0,0.5)'
+          }}>
+            <h4 style={{ margin: '0 0 10px 0', display: 'flex', justifyContent: 'space-between' }}>
+              Debug Logs <button onClick={() => setShowDebug(false)} style={{ background: 'none', border: 'none', color: '#ff4d4d', cursor: 'pointer' }}>Close</button>
+            </h4>
+            <div id="debug-log-content">
+              <p><strong>Device:</strong> {navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop'}</p>
+              <p><strong>URL:</strong> {window.location.href}</p>
+              <p><strong>History State:</strong> {JSON.stringify(window.history.state)}</p>
+              <p><strong>View:</strong> {currentView}</p>
+              <hr />
+              <div id="audio-debug-info">
+                {/* Dynamically updated by PlayerContext */}
+                <p>Loading audio state...</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {searchQuery.trim() !== '' ? (
           <section className="search-view">

@@ -21,9 +21,16 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     // Keep a ref of the latest state to avoid closure issues in event listeners
     const stateRef = useRef({ currentSong, queue, isShuffle, repeatMode, volume, searchContext });
+    const isFetchingNext = useRef(false);
+
     useEffect(() => {
         stateRef.current = { currentSong, queue, isShuffle, repeatMode, volume, searchContext };
     }, [currentSong, queue, isShuffle, repeatMode, volume, searchContext]);
+
+    // Reset pre-fetcher on song change
+    useEffect(() => {
+        isFetchingNext.current = false;
+    }, [currentSong?.id]);
 
     // Persist preferences
     useEffect(() => {
@@ -117,7 +124,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (newQueue) setQueue(newQueue.map(s => s.id === finalSong.id ? finalSong : s));
         if (context) setSearchContext(context);
         else if (newQueue) setSearchContext(null);
-
         const downloadUrls = Array.isArray(finalSong.downloadUrl) ? finalSong.downloadUrl : [];
         const audioUrl = downloadUrls.length > 0
             ? [...downloadUrls].sort((a, b) => parseInt(b.quality) - parseInt(a.quality))[0]?.link
@@ -128,13 +134,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             audioRef.current.src = audioUrl;
             audioRef.current.preload = "auto";
 
+            // Set playback state before playing to ensure notification sync
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.playbackState = 'playing';
+            }
+
             audioRef.current.play()
                 .then(() => {
                     setIsPlaying(true);
                     acquireWakeLock();
                 })
                 .catch(err => {
-                    console.error("Playback failed after sync attempt:", err);
+                    console.error("Playback failed after fetch:", err);
                     setIsPlaying(false);
                 });
         }
@@ -218,14 +229,46 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         const updateProgress = () => {
             const currentTime = audio.currentTime;
+            const currentDuration = audio.duration;
             setProgress(currentTime);
 
-            if ('mediaSession' in navigator && audio.duration && isFinite(audio.duration) && currentTime >= 0) {
+            if (currentDuration > 0) {
+                const percent = (currentTime / currentDuration) * 100;
+                // --- PRE-FETCHING LOGIC ---
+                if (percent > 90 && !isFetchingNext.current) {
+                    const { currentSong: s_curr, queue: s_q } = stateRef.current;
+                    const nextIdx = s_q.findIndex(s => s.id === s_curr?.id) + 1;
+                    if (nextIdx < s_q.length) {
+                        const nextS = s_q[nextIdx];
+                        if (!nextS.downloadUrl || (Array.isArray(nextS.downloadUrl) && nextS.downloadUrl.length === 0)) {
+                            isFetchingNext.current = true;
+                            console.log("[Background] Pre-fetching next song:", nextS.name);
+                            MusicAPI.getSongById(nextS.id).then(res => {
+                                if (res?.status === 'SUCCESS' && res.data?.[0]) {
+                                    const fullNext = {
+                                        ...res.data[0],
+                                        primaryArtists: Array.isArray(res.data[0].primaryArtists)
+                                            ? res.data[0].primaryArtists.map((a: any) => a.name || '').filter(Boolean).join(', ') || 'Unknown Artist'
+                                            : (typeof res.data[0].primaryArtists === 'string' ? res.data[0].primaryArtists : 'Unknown Artist'),
+                                        image: Array.isArray(res.data[0].image) ? res.data[0].image : [],
+                                        downloadUrl: Array.isArray(res.data[0].downloadUrl) ? res.data[0].downloadUrl : [],
+                                    };
+                                    setQueue(prev => prev.map(s => s.id === nextS.id ? fullNext : s));
+                                    const dbg = document.getElementById('audio-debug-info');
+                                    if (dbg) dbg.innerHTML += `<p style="color:var(--accent-primary)">[Pre-fetched: ${fullNext.name}]</p>`;
+                                }
+                            }).catch(() => { isFetchingNext.current = false; });
+                        }
+                    }
+                }
+            }
+
+            if ('mediaSession' in navigator && currentDuration && isFinite(currentDuration) && currentTime >= 0) {
                 try {
                     navigator.mediaSession.setPositionState?.({
-                        duration: audio.duration,
+                        duration: currentDuration,
                         playbackRate: audio.playbackRate,
-                        position: Math.min(currentTime, audio.duration),
+                        position: Math.min(currentTime, currentDuration),
                     });
                 } catch (e) { /* seek transitions */ }
             }
@@ -329,6 +372,34 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const progressValue = useMemo(() => ({
         progress, duration, seek
     }), [progress, duration]);
+
+    // --- DEBUG REPORTING EFFECT ---
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const debugDiv = document.getElementById('audio-debug-info');
+            if (debugDiv && audioRef.current) {
+                const audio = audioRef.current;
+                const ms = (navigator as any).mediaSession;
+                debugDiv.innerHTML = `
+                    <p><strong>Audio Info:</strong></p>
+                    <ul style="padding-left: 20px;">
+                        <li>Paused: ${audio.paused}</li>
+                        <li>Current: ${audio.currentTime.toFixed(1)}s</li>
+                        <li>Duration: ${audio.duration.toFixed(1)}s</li>
+                        <li>ReadyState: ${audio.readyState}</li>
+                        <li>ErrorCode: ${audio.error ? audio.error.code : 'None'}</li>
+                        <li>Src: ${audio.src ? audio.src.substring(0, 30) + '...' : 'None'}</li>
+                    </ul>
+                    <p><strong>MediaSession:</strong></p>
+                    <ul style="padding-left: 20px;">
+                        <li>State: ${ms ? ms.playbackState : 'N/A'}</li>
+                        <li>Metadata: ${ms && ms.metadata ? ms.metadata.title : 'None'}</li>
+                    </ul>
+                `;
+            }
+        }, 1000);
+        return () => clearInterval(interval);
+    }, []);
 
     return (
         <PlayerContext.Provider value={playerValue}>

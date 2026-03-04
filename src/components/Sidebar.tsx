@@ -1,9 +1,12 @@
 import { Home, Search, Library, PlayCircle, Settings } from 'lucide-react';
 
-export default function Sidebar({ onNavigate }: { onNavigate: (view: string, playlistId?: string, title?: string) => void }) {
+export default function Sidebar({ onNavigate, onLogoClick }: {
+    onNavigate: (view: string, playlistId?: string, title?: string) => void,
+    onLogoClick?: () => void
+}) {
     return (
         <aside className="sidebar glass-panel">
-            <div className="logo-container">
+            <div className="logo-container" onClick={onLogoClick} style={{ cursor: 'pointer' }}>
                 <PlayCircle size={32} color="var(--accent-primary)" />
                 <h1 className="text-gradient">UK-Beats</h1>
             </div>
