@@ -1343,10 +1343,28 @@
     box-shadow: none;
   }
 
-  /* Card grid — 2 columns on mobile */
+  /* Card grid — horizontal scrollable row on mobile so all cards stay same size */
   .card-grid {
-    grid-template-columns: repeat(2, 1fr);
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
     gap: 12px;
+    /* Hide scrollbar but keep scroll functionality */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding-bottom: 4px;
+  }
+
+  .card-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Each card has a fixed width so they're all identical sizes */
+  .card-grid .track-card {
+    flex: 0 0 145px;
+    min-width: 145px;
+    max-width: 145px;
   }
 
   .track-card {
