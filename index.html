@@ -13,8 +13,12 @@
 </head>
 
 <body>
-  <!-- Real DOM audio element required for Android MediaSession notification player to activate -->
-  <audio id="uk-beats-audio" preload="auto" style="display:none;" crossorigin="anonymous"></audio>
+  <!--
+    Real DOM audio element — REQUIRED for Android Chrome MediaSession notification player.
+    NOTE: No crossorigin attribute — JioSaavn CDN URLs do not serve CORS headers.
+    Adding crossorigin would cause a CORS fetch failure, preventing the element from playing.
+  -->
+  <audio id="uk-beats-audio" preload="auto" style="display:none;"></audio>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
 </body>

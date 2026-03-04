@@ -30,6 +30,54 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         StorageService.savePreferences({ volume, isShuffle, repeatMode });
     }, [volume, isShuffle, repeatMode]);
 
+    // Wake Lock ref — keeps audio alive when screen turns off
+    const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+
+    const acquireWakeLock = async () => {
+        try {
+            if ('wakeLock' in navigator && !wakeLockRef.current) {
+                wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+                wakeLockRef.current?.addEventListener('release', () => {
+                    wakeLockRef.current = null;
+                });
+            }
+        } catch (e) {
+            // Wake Lock not supported or denied — not critical
+        }
+    };
+
+    const releaseWakeLock = () => {
+        wakeLockRef.current?.release();
+        wakeLockRef.current = null;
+    };
+
+    // Re-acquire Wake Lock when page becomes visible again (screen re-lit after lock)
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                // Page is visible again — if we were playing, ensure audio is still going
+                const audio = audioRef.current;
+                if (audio && stateRef.current.currentSong) {
+                    // Resume audio if it got paused by browser suspension
+                    if (!audio.paused) {
+                        // Already playing, ensure MediaSession reflects this
+                        if ('mediaSession' in navigator) {
+                            navigator.mediaSession.playbackState = 'playing';
+                        }
+                    } else if (stateRef.current.currentSong) {
+                        // Audio got paused by OS — try to resume
+                        audio.play().catch(() => { });
+                    }
+                    // Re-acquire wake lock in case it was released on screen-off
+                    acquireWakeLock();
+                }
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, []);
+
     const playSong = async (song: Song, newQueue?: Song[], context?: { query: string; page: number }) => {
         let finalSong = song;
 
@@ -268,8 +316,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
 
         // Bind all playback control handlers
-        navigator.mediaSession.setActionHandler('play', () => { audioRef.current?.play(); setIsPlaying(true); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
-        navigator.mediaSession.setActionHandler('pause', () => { audioRef.current?.pause(); setIsPlaying(false); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
+        navigator.mediaSession.setActionHandler('play', () => {
+            audioRef.current?.play();
+            setIsPlaying(true);
+            navigator.mediaSession.playbackState = 'playing';
+            acquireWakeLock();
+        });
+        navigator.mediaSession.setActionHandler('pause', () => {
+            audioRef.current?.pause();
+            setIsPlaying(false);
+            navigator.mediaSession.playbackState = 'paused';
+            releaseWakeLock();
+        });
         navigator.mediaSession.setActionHandler('previoustrack', prevSong);
         navigator.mediaSession.setActionHandler('nexttrack', nextSong);
 
@@ -298,8 +356,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         if (isPlaying) {
             audioRef.current.pause();
+            releaseWakeLock();
         } else {
             audioRef.current.play();
+            acquireWakeLock();
         }
         setIsPlaying(!isPlaying);
     };
