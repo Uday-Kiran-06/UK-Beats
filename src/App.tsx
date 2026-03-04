@@ -12,6 +12,7 @@ import { useAuth } from './context/useAuth';
 import SettingsView from './components/SettingsView';
 import PlaylistManager from './components/PlaylistManager';
 import PlaylistDetailView from './components/PlaylistDetailView';
+import { App as CapApp } from '@capacitor/app';
 import './App.css';
 import './Search.css';
 
@@ -131,17 +132,33 @@ function App() {
     }, 500); // 500ms debounce
   };
 
-  // --- PERSISTENT HISTORY GUARD (Double Guardian) ---
+  // --- NATIVE BACK BUTTON HANDLER (Capacitor) ---
   useEffect(() => {
-    // We strictly use a base and guardian state. 
-    // If the browser pops to 'base', it means the user swiped back from the app root.
+    const handleBackButton = async () => {
+      // If we are not on Home, navigate to Home
+      if (currentView !== 'home') {
+        setCurrentView('home');
+        setSearchQuery('');
+        return;
+      }
+      // If we ARE on Home, we can decide to minimize or do nothing.
+      // Usually, we want to prevent closure while music plays.
+    };
+
+    const listener = CapApp.addListener('backButton', handleBackButton);
+
+    return () => {
+      listener.then(l => l.remove());
+    };
+  }, [currentView]);
+
+  // --- PERSISTENT HISTORY GUARD (Legacy PWA Support) ---
+  useEffect(() => {
     if (!window.history.state || (window.history.state.type !== 'guardian' && window.history.state.type !== 'base')) {
       window.history.replaceState({ type: 'base' }, '');
       window.history.pushState({ type: 'guardian' }, '');
     }
-
     const handlePopState = (event: PopStateEvent) => {
-      // If we land on 'base' or something unknown, push back to 'guardian' immediately
       if (!event.state || event.state.type === 'base') {
         if (currentView !== 'home') {
           setCurrentView('home');
@@ -150,7 +167,6 @@ function App() {
         window.history.pushState({ type: 'guardian' }, '');
       }
     };
-
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [currentView]);
