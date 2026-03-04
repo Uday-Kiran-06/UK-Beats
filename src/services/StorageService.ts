@@ -30,6 +30,21 @@ export const StorageService = {
             });
         return { error };
     },
+    fetchProfileFromCloud: async (userId: string): Promise<UserProfile | null> => {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .single();
+        if (error || !data) return null;
+        return {
+            id: data.id,
+            name: data.name || '',
+            avatar: data.avatar_url || '',
+            stats: data.stats || { playlists: 0, songs: 0 },
+            joinDate: data.updated_at
+        };
+    },
 
     // Playlists
     getPlaylists: (): Playlist[] => {
@@ -61,6 +76,19 @@ export const StorageService = {
             .upsert(cloudPlaylists, { onConflict: 'user_id, name' });
 
         return { error };
+    },
+    fetchPlaylistsFromCloud: async (userId: string): Promise<Playlist[]> => {
+        const { data, error } = await supabase
+            .from('playlists')
+            .select('*')
+            .eq('user_id', userId);
+        if (error || !data) return [];
+        return data.map(p => ({
+            id: p.created_at ? new Date(p.created_at).getTime().toString() : Date.now().toString(), // basic ID fallback
+            name: p.name,
+            songs: p.songs || [],
+            createdAt: p.created_at ? new Date(p.created_at).toLocaleDateString() : new Date().toLocaleDateString()
+        }));
     },
 
     deletePlaylist: (id: string): void => {

@@ -49,6 +49,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ profile, onUpdate }) => {
         // Optional: Update user metadata in Supabase
         if (user) {
             supabase.auth.updateUser({ data: { full_name: name } });
+            StorageService.syncProfileToCloud(user.id, updatedProfile);
         }
         alert('Profile updated!');
     };

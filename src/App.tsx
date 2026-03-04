@@ -8,6 +8,7 @@ import { Play, Search as SearchIcon, Loader2, Plus, User as UserIcon, ArrowLeft 
 import type { Song, UserProfile, Playlist, Album, Chart } from './types';
 import { StorageService } from './services/StorageService';
 import { useTheme } from './context/useTheme';
+import { useAuth } from './context/useAuth';
 import SettingsView from './components/SettingsView';
 import PlaylistManager from './components/PlaylistManager';
 import PlaylistDetailView from './components/PlaylistDetailView';
@@ -28,6 +29,7 @@ const normalizeSong = (raw: any): Song => ({
 function App() {
   const { playSong } = usePlayer();
   const { theme } = useTheme();
+  const { user } = useAuth();
   const [trending, setTrending] = useState<Song[]>([]);
   const [newAlbums, setNewAlbums] = useState<Album[]>([]);
   const [featuredPlaylists, setFeaturedPlaylists] = useState<any[]>([]);
@@ -61,6 +63,25 @@ function App() {
       console.error("Dashboard data load failed:", err);
     });
   }, []);
+
+  // Fetch from Supabase Cloud on Login / App Load
+  useEffect(() => {
+    if (user) {
+      StorageService.fetchProfileFromCloud(user.id).then(profile => {
+        if (profile) {
+          setCurrentUser(profile);
+          StorageService.saveProfile(profile);
+        }
+      });
+      StorageService.fetchPlaylistsFromCloud(user.id).then(playlists => {
+        if (playlists && playlists.length > 0) {
+          setCustomPlaylists(playlists);
+          // Overwrite local with cloud
+          playlists.forEach(p => StorageService.savePlaylist(p));
+        }
+      });
+    }
+  }, [user]);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
@@ -220,11 +241,15 @@ function App() {
 
   const [trackToPlaylist, setTrackToPlaylist] = useState<Song | null>(null);
 
-  const handleAddToPlaylist = (playlistId: string) => {
+  const handleAddToPlaylist = async (playlistId: string) => {
     if (trackToPlaylist) {
       StorageService.addSongToPlaylist(playlistId, trackToPlaylist);
       setTrackToPlaylist(null);
-      setCustomPlaylists(StorageService.getPlaylists());
+      const updatedPlaylists = StorageService.getPlaylists();
+      setCustomPlaylists(updatedPlaylists);
+      if (user) {
+        await StorageService.syncPlaylistsToCloud(user.id, updatedPlaylists);
+      }
       alert('Added to playlist!');
     }
   };

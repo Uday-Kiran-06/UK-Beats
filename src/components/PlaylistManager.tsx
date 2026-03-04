@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Plus, ListMusic, Trash2 } from 'lucide-react';
 import type { Playlist } from '../types';
 import { StorageService } from '../services/StorageService';
+import { useAuth } from '../context/useAuth';
 
 interface PlaylistManagerProps {
     playlists: Playlist[];
@@ -10,10 +11,11 @@ interface PlaylistManagerProps {
 }
 
 const PlaylistManager: React.FC<PlaylistManagerProps> = ({ playlists, onSelect, onCreate }) => {
+    const { user } = useAuth();
     const [newPlaylistName, setNewPlaylistName] = useState('');
     const [isCreating, setIsCreating] = useState(false);
 
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (!newPlaylistName.trim()) return;
         const newPlaylist: Playlist = {
             id: Date.now().toString(),
@@ -22,15 +24,21 @@ const PlaylistManager: React.FC<PlaylistManagerProps> = ({ playlists, onSelect, 
             createdAt: new Date().toLocaleDateString()
         };
         StorageService.savePlaylist(newPlaylist);
+        if (user) {
+            await StorageService.syncPlaylistsToCloud(user.id, StorageService.getPlaylists());
+        }
         setNewPlaylistName('');
         setIsCreating(false);
         onCreate();
     };
 
-    const handleDelete = (e: React.MouseEvent, id: string) => {
+    const handleDelete = async (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
         if (window.confirm('Are you sure you want to delete this playlist?')) {
             StorageService.deletePlaylist(id);
+            if (user) {
+                await StorageService.syncPlaylistsToCloud(user.id, StorageService.getPlaylists());
+            }
             onCreate(); // Refresh list
         }
     };

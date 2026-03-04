@@ -1,9 +1,10 @@
-import React from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, Download, Shuffle, Repeat } from 'lucide-react';
+import React, { useState } from 'react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, Download, Shuffle, Repeat, ChevronDown } from 'lucide-react';
 import { usePlayer } from '../context/usePlayer';
 import { usePlayerProgress } from '../context/usePlayerProgress';
 
 const PlayerBar: React.FC = () => {
+    const [isExpanded, setIsExpanded] = useState(false);
     const {
         currentSong, isPlaying, togglePlay,
         nextSong, prevSong, isShuffle, repeatMode, toggleShuffle, toggleRepeat,
@@ -41,8 +42,14 @@ const PlayerBar: React.FC = () => {
     const repeatTitle = repeatMode === 'none' ? 'Repeat Off' : repeatMode === 'all' ? 'Repeat All' : 'Repeat One';
 
     return (
-        <div className="player-bar glass-panel">
-            <div className="now-playing">
+        <div className={`player-bar glass-panel ${isExpanded ? 'expanded' : ''}`}>
+            {isExpanded && (
+                <button className="btn-collapse" onClick={(e) => { e.stopPropagation(); setIsExpanded(false); }}>
+                    <ChevronDown size={24} />
+                </button>
+            )}
+
+            <div className="now-playing" onClick={() => !isExpanded && setIsExpanded(true)}>
                 <img
                     src={Array.isArray(currentSong.image) ? (currentSong.image[currentSong.image.length - 1]?.link || '') : ''}
                     alt="cover"

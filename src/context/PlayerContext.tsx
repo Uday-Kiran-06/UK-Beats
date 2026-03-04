@@ -30,14 +30,40 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         StorageService.savePreferences({ volume, isShuffle, repeatMode });
     }, [volume, isShuffle, repeatMode]);
 
-    const playSong = (song: Song, newQueue?: Song[], context?: { query: string; page: number }) => {
-        setCurrentSong(song);
-        if (newQueue) setQueue(newQueue);
+    const playSong = async (song: Song, newQueue?: Song[], context?: { query: string; page: number }) => {
+        let finalSong = song;
+
+        // If the song is missing download URLs (e.g., from a dashboard endpoint queue), fetch full details
+        if (!song.downloadUrl || (Array.isArray(song.downloadUrl) && song.downloadUrl.length === 0)) {
+            try {
+                const res = await MusicAPI.getSongById(song.id);
+                if (res?.status === 'SUCCESS' && res.data && res.data.length > 0) {
+                    finalSong = {
+                        ...res.data[0],
+                        primaryArtists: Array.isArray(res.data[0].primaryArtists)
+                            ? res.data[0].primaryArtists.map((a: any) => a.name || '').filter(Boolean).join(', ') || 'Unknown Artist'
+                            : (typeof res.data[0].primaryArtists === 'string' ? res.data[0].primaryArtists : 'Unknown Artist'),
+                        image: Array.isArray(res.data[0].image) ? res.data[0].image : [],
+                        downloadUrl: Array.isArray(res.data[0].downloadUrl) ? res.data[0].downloadUrl : [],
+                    };
+
+                    // Update this song inside the current queue if we're not providing a new queue
+                    if (!newQueue && queue.length > 0) {
+                        setQueue(prevQueue => prevQueue.map(s => s.id === finalSong.id ? finalSong : s));
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to fetch full song details in playSong:', err);
+            }
+        }
+
+        setCurrentSong(finalSong);
+        if (newQueue) setQueue(newQueue.map(s => s.id === finalSong.id ? finalSong : s));
         if (context) setSearchContext(context);
         else if (newQueue) setSearchContext(null); // Clear context if playing a standard playlist
 
         // Get highest quality audio — guard against missing/non-array downloadUrl
-        const downloadUrls = Array.isArray(song.downloadUrl) ? song.downloadUrl : [];
+        const downloadUrls = Array.isArray(finalSong.downloadUrl) ? finalSong.downloadUrl : [];
         const audioUrl = downloadUrls.length > 0
             ? [...downloadUrls].sort((a, b) => parseInt(b.quality) - parseInt(a.quality))[0]?.link
             : undefined;
