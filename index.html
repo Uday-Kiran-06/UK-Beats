@@ -13,6 +13,8 @@
 </head>
 
 <body>
+  <!-- Real DOM audio element required for Android MediaSession notification player to activate -->
+  <audio id="uk-beats-audio" preload="auto" style="display:none;" crossorigin="anonymous"></audio>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
 </body>

@@ -184,8 +184,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
 
     useEffect(() => {
+        // Use the real DOM audio element instead of new Audio() 
+        // A DOM element is REQUIRED for Android MediaSession notification player to activate
         if (!audioRef.current) {
-            audioRef.current = new Audio();
+            audioRef.current = document.getElementById('uk-beats-audio') as HTMLAudioElement || new Audio();
         }
         const audio = audioRef.current;
 
@@ -193,16 +195,16 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             const currentTime = audio.currentTime;
             setProgress(currentTime);
 
-            // Synchronize MediaSession position
-            if ('mediaSession' in navigator && audio.duration && isFinite(audio.duration)) {
+            // Synchronize MediaSession position state so the notification scrubber works
+            if ('mediaSession' in navigator && audio.duration && isFinite(audio.duration) && currentTime >= 0) {
                 try {
                     navigator.mediaSession.setPositionState?.({
                         duration: audio.duration,
                         playbackRate: audio.playbackRate,
-                        position: currentTime
+                        position: Math.min(currentTime, audio.duration),
                     });
                 } catch (e) {
-                    // Silently fail if state is invalid (e.g. during seek)
+                    // Silently fail during seek transitions
                 }
             }
         };
@@ -236,55 +238,60 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
     }, [volume]);
 
-    // Update Media Session API for background play
+    // Update Media Session API metadata and handlers on song change / play state change
     useEffect(() => {
-        if ('mediaSession' in navigator && currentSong) {
-            const artistName = Array.isArray(currentSong.primaryArtists)
-                ? (currentSong.primaryArtists as any[]).map((a: any) => a.name || '').filter(Boolean).join(', ') || 'Unknown Artist'
-                : (currentSong.primaryArtists || 'Unknown Artist');
+        if (!('mediaSession' in navigator) || !currentSong) return;
 
-            const imageArr = Array.isArray(currentSong.image) ? currentSong.image : [];
-            const artworks = imageArr.map(img => ({
+        const artistName = typeof currentSong.primaryArtists === 'string'
+            ? currentSong.primaryArtists
+            : (Array.isArray(currentSong.primaryArtists)
+                ? (currentSong.primaryArtists as any[]).map((a: any) => a.name || '').filter(Boolean).join(', ')
+                : 'Unknown Artist') || 'Unknown Artist';
+
+        const imageArr = Array.isArray(currentSong.image) ? currentSong.image : [];
+        // MediaSession artwork must use real MIME types; 'image/jpeg' for photo content
+        const artworks: MediaImage[] = imageArr
+            .filter(img => img?.link)
+            .map(img => ({
                 src: img.link,
-                sizes: img.quality === '500x500' ? '500x500' : (img.quality === '150x150' ? '150x150' : '50x50'),
-                type: 'image/jpeg'
+                sizes: img.quality === '500x500' ? '500x500' : (img.quality === '150x150' ? '150x150' : '96x96'),
+                type: 'image/jpeg',
             }));
 
-            navigator.mediaSession.metadata = new MediaMetadata({
-                title: currentSong.name,
-                artist: artistName,
-                album: currentSong.album?.name || 'Unknown Album',
-                artwork: artworks,
-            });
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: currentSong.name || 'Unknown Title',
+            artist: artistName,
+            album: (currentSong.album as any)?.name || 'UK-Beats',
+            artwork: artworks,
+        });
 
-            // Update playback state
-            navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+        navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
 
-            // Basic Handlers
-            navigator.mediaSession.setActionHandler('play', () => { togglePlay(); });
-            navigator.mediaSession.setActionHandler('pause', () => { togglePlay(); });
-            navigator.mediaSession.setActionHandler('previoustrack', prevSong);
-            navigator.mediaSession.setActionHandler('nexttrack', nextSong);
+        // Bind all playback control handlers
+        navigator.mediaSession.setActionHandler('play', () => { audioRef.current?.play(); setIsPlaying(true); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
+        navigator.mediaSession.setActionHandler('pause', () => { audioRef.current?.pause(); setIsPlaying(false); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
+        navigator.mediaSession.setActionHandler('previoustrack', prevSong);
+        navigator.mediaSession.setActionHandler('nexttrack', nextSong);
 
-            // Seek Handlers
-            navigator.mediaSession.setActionHandler('seekto', (details) => {
-                if (details.seekTime !== undefined) {
-                    seek(details.seekTime);
-                }
-            });
-
-            navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-                const off = details.seekOffset || 10;
-                seek(Math.max(0, (audioRef.current?.currentTime || 0) - off));
-            });
-
-            navigator.mediaSession.setActionHandler('seekforward', (details) => {
-                const off = details.seekOffset || 10;
-                seek(Math.min(duration, (audioRef.current?.currentTime || 0) + off));
-            });
-        }
+        navigator.mediaSession.setActionHandler('seekto', (details) => {
+            if (details.seekTime !== undefined && audioRef.current) {
+                audioRef.current.currentTime = details.seekTime;
+                setProgress(details.seekTime);
+            }
+        });
+        navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+            if (audioRef.current) {
+                const off = details.seekOffset ?? 10;
+                audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - off);
+            }
+        });
+        navigator.mediaSession.setActionHandler('seekforward', (details) => {
+            if (audioRef.current) {
+                const off = details.seekOffset ?? 10;
+                audioRef.current.currentTime = Math.min(duration, audioRef.current.currentTime + off);
+            }
+        });
     }, [currentSong, isPlaying, duration]);
-
 
     const togglePlay = () => {
         if (!audioRef.current || !currentSong) return;
