@@ -106,6 +106,35 @@ export const StorageService = {
             }
         }
     },
+    getLikedPlaylist: (): Playlist => {
+        const playlists = StorageService.getPlaylists();
+        let liked = playlists.find(p => p.name === 'Liked Songs');
+        if (!liked) {
+            liked = {
+                id: 'liked-songs',
+                name: 'Liked Songs',
+                songs: [],
+                createdAt: new Date().toLocaleDateString()
+            };
+            StorageService.savePlaylist(liked);
+        }
+        return liked;
+    },
+    isSongLiked: (songId: string): boolean => {
+        const liked = StorageService.getLikedPlaylist();
+        return liked.songs.some(s => s.id === songId);
+    },
+    toggleLikeSong: (song: Song): boolean => {
+        const liked = StorageService.getLikedPlaylist();
+        const exists = liked.songs.some(s => s.id === song.id);
+        if (exists) {
+            liked.songs = liked.songs.filter(s => s.id !== song.id);
+        } else {
+            liked.songs.push(song);
+        }
+        StorageService.savePlaylist(liked);
+        return !exists;
+    },
 
     // Preferences
     getPreferences: (): UserPreferences => {

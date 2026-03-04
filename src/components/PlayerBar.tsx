@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, Download, Shuffle, Repeat, ChevronDown } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, Download, Shuffle, Repeat, ChevronDown, ListPlus, Heart } from 'lucide-react';
 import { usePlayer } from '../context/usePlayer';
 import { usePlayerProgress } from '../context/usePlayerProgress';
+import { StorageService } from '../services/StorageService';
 
 const PlayerBar: React.FC = () => {
     const [isExpanded, setIsExpanded] = useState(false);
@@ -12,6 +13,19 @@ const PlayerBar: React.FC = () => {
     } = usePlayer();
 
     const { progress, duration, seek } = usePlayerProgress();
+    const [isAnimating, setIsAnimating] = useState(false);
+
+    const isLiked = currentSong ? StorageService.isSongLiked(currentSong.id) : false;
+
+    const handleLike = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!currentSong) return;
+        StorageService.toggleLikeSong(currentSong);
+        setIsAnimating(true);
+        setTimeout(() => setIsAnimating(false), 400);
+        // Dispatch event to refresh playlist views if Liked Songs is open
+        window.dispatchEvent(new CustomEvent('playlists-updated'));
+    };
 
     const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setVolume(Number(e.target.value));
@@ -58,6 +72,23 @@ const PlayerBar: React.FC = () => {
                 <div className="track-info">
                     <h4 className="track-title">{currentSong.name}</h4>
                     <p className="track-artist">{currentSong.primaryArtists || 'Unknown'}</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                        className={`btn-like ${isLiked ? 'liked' : ''} ${isAnimating ? 'animate-heart' : ''}`}
+                        onClick={handleLike}
+                        title={isLiked ? 'Unlike' : 'Like'}
+                    >
+                        <Heart size={20} fill={isLiked ? 'currentColor' : 'none'} />
+                    </button>
+                    {isExpanded && (
+                        <button className="btn-icon" style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '50%', padding: 12 }} onClick={(e) => {
+                            e.stopPropagation();
+                            window.dispatchEvent(new CustomEvent('add-to-playlist', { detail: currentSong }));
+                        }} title="Add to Playlist">
+                            <ListPlus size={24} />
+                        </button>
+                    )}
                 </div>
             </div>
 

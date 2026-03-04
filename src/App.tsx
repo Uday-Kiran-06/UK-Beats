@@ -241,6 +241,23 @@ function App() {
 
   const [trackToPlaylist, setTrackToPlaylist] = useState<Song | null>(null);
 
+  useEffect(() => {
+    const handleAddToPlaylistEvent = (e: any) => {
+      setTrackToPlaylist(e.detail);
+    };
+    window.addEventListener('add-to-playlist', handleAddToPlaylistEvent);
+
+    const handlePlaylistsUpdated = () => {
+      setCustomPlaylists(StorageService.getPlaylists());
+    };
+    window.addEventListener('playlists-updated', handlePlaylistsUpdated);
+
+    return () => {
+      window.removeEventListener('add-to-playlist', handleAddToPlaylistEvent);
+      window.removeEventListener('playlists-updated', handlePlaylistsUpdated);
+    };
+  }, []);
+
   const handleAddToPlaylist = async (playlistId: string) => {
     if (trackToPlaylist) {
       StorageService.addSongToPlaylist(playlistId, trackToPlaylist);

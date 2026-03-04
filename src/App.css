@@ -1422,11 +1422,9 @@
     gap: 4px;
   }
 
-  /* Hide shuffle / prev / repeat on mobile player — keep only play and next */
+  /* Hide shuffle / repeat on mobile player — keep prev, play, and next */
   .control-buttons button:nth-child(1),
   /* shuffle */
-  .control-buttons button:nth-child(2),
-  /* prev */
   .control-buttons button:nth-child(5) {
     /* repeat */
     display: none;
@@ -1609,5 +1607,41 @@
     padding: 8px 10px;
     font-size: 9px;
     min-width: 44px;
+  }
+}
+
+/* Like Button & Animations */
+.btn-like {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-like.liked {
+  color: var(--accent-primary);
+}
+
+.btn-like.animate-heart {
+  animation: heart-burst 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes heart-burst {
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.4);
+  }
+
+  100% {
+    transform: scale(1);
   }
 }

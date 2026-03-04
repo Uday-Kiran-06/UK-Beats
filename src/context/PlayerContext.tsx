@@ -123,6 +123,27 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
 
     const fetchAndPlaySuggestions = (song: Song, currentQueue: Song[]) => {
+        const language = typeof song.language === 'string' && song.language.trim() !== '' ? song.language.toLowerCase() : null;
+
+        if (language && language !== 'unknown') {
+            const randomPage = Math.floor(Math.random() * 10) + 1;
+            MusicAPI.searchSongs(`${language} songs`, randomPage, 20).then(res => {
+                if (res.status === 'SUCCESS' && res.data.results && res.data.results.length > 0) {
+                    const newSongs = res.data.results.filter((s: Song) => !currentQueue.some(qs => qs.id === s.id));
+                    if (newSongs.length > 0) {
+                        setQueue(prev => [...prev, ...newSongs]);
+                        playSong(newSongs[0]);
+                        return;
+                    }
+                }
+                fetchStandardSuggestions(song, currentQueue);
+            }).catch(() => fetchStandardSuggestions(song, currentQueue));
+        } else {
+            fetchStandardSuggestions(song, currentQueue);
+        }
+    };
+
+    const fetchStandardSuggestions = (song: Song, currentQueue: Song[]) => {
         MusicAPI.getSuggestions(song.id).then(res => {
             if (res.status === 'SUCCESS' && res.data && res.data.length > 0) {
                 const suggestions = res.data;
