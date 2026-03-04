@@ -111,6 +111,28 @@ function App() {
     }, 500); // 500ms debounce
   };
 
+  // --- MOBILE BACK BUTTON PERSISTENCE ---
+  useEffect(() => {
+    const handlePopState = () => {
+      // If we are not on home, hitting back should take us home
+      if (currentView !== 'home') {
+        setCurrentView('home');
+        setSearchQuery('');
+        // Maintain a dummy entry in history so the NEXT back press can also be intercepted
+        window.history.pushState(null, '', window.location.pathname);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [currentView]);
+
+  useEffect(() => {
+    if (currentView !== 'home') {
+      window.history.pushState({ view: currentView }, '', window.location.pathname);
+    }
+  }, [currentView]);
+
   useEffect(() => {
     const observer = new IntersectionObserver(
       entries => {
@@ -132,7 +154,6 @@ function App() {
     };
   }, [hasMoreSearch, isSearching, searchQuery, searchPage]);
 
-
   const loadMoreSearch = () => {
     setIsSearching(true);
     const nextPage = searchPage + 1;
@@ -147,6 +168,7 @@ function App() {
       .catch(console.error)
       .finally(() => setIsSearching(false));
   };
+
 
   const renderTrackCard = (song: Song, contextQueue: Song[], isSearchResult = false) => {
     if (!song) return null;

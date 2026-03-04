@@ -198,29 +198,51 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Update Media Session API for background play
     useEffect(() => {
         if ('mediaSession' in navigator && currentSong) {
-            // primaryArtists could be an array of objects from the raw API — normalize to string
             const artistName = Array.isArray(currentSong.primaryArtists)
                 ? (currentSong.primaryArtists as any[]).map((a: any) => a.name || '').filter(Boolean).join(', ') || 'Unknown Artist'
                 : (currentSong.primaryArtists || 'Unknown Artist');
 
             const imageArr = Array.isArray(currentSong.image) ? currentSong.image : [];
-            const artwork = imageArr.length > 0
-                ? [{ src: [...imageArr].sort((a, b) => parseInt(b.quality) - parseInt(a.quality))[0]?.link || '', sizes: '500x500', type: 'image/jpeg' }]
-                : [];
+            const artworks = imageArr.map(img => ({
+                src: img.link,
+                sizes: img.quality === '500x500' ? '500x500' : (img.quality === '150x150' ? '150x150' : '50x50'),
+                type: 'image/jpeg'
+            }));
 
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: currentSong.name,
                 artist: artistName,
                 album: currentSong.album?.name || 'Unknown Album',
-                artwork,
+                artwork: artworks,
             });
 
-            navigator.mediaSession.setActionHandler('play', () => { audioRef.current?.play(); setIsPlaying(true); });
-            navigator.mediaSession.setActionHandler('pause', () => { audioRef.current?.pause(); setIsPlaying(false); });
+            // Update playback state
+            navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+
+            // Basic Handlers
+            navigator.mediaSession.setActionHandler('play', () => { togglePlay(); });
+            navigator.mediaSession.setActionHandler('pause', () => { togglePlay(); });
             navigator.mediaSession.setActionHandler('previoustrack', prevSong);
             navigator.mediaSession.setActionHandler('nexttrack', nextSong);
+
+            // Seek Handlers
+            navigator.mediaSession.setActionHandler('seekto', (details) => {
+                if (details.seekTime !== undefined) {
+                    seek(details.seekTime);
+                }
+            });
+
+            navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+                const off = details.seekOffset || 10;
+                seek(Math.max(0, (audioRef.current?.currentTime || 0) - off));
+            });
+
+            navigator.mediaSession.setActionHandler('seekforward', (details) => {
+                const off = details.seekOffset || 10;
+                seek(Math.min(duration, (audioRef.current?.currentTime || 0) + off));
+            });
         }
-    }, [currentSong]);
+    }, [currentSong, isPlaying, duration]);
 
 
     const togglePlay = () => {
