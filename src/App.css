@@ -1282,6 +1282,8 @@
     grid-column: 1;
     grid-row: 1;
     padding: 16px;
+    /* Respect physical notch/status bar on mobile */
+    padding-top: calc(16px + env(safe-area-inset-top, 24px));
     /* Extra bottom padding: mini player (72px) + bottom nav (64px) + gap */
     padding-bottom: 160px;
     overflow-y: auto;
