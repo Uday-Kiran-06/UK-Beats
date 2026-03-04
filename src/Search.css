@@ -1,0 +1,35 @@
+.search-bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-bar .search-icon {
+    position: absolute;
+    left: 16px;
+    color: var(--text-secondary);
+}
+
+.search-bar input {
+    padding-left: 48px;
+}
+
+.search-bar .spinner {
+    position: absolute;
+    right: 16px;
+    color: var(--accent-primary);
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.no-results {
+    color: var(--text-secondary);
+    font-size: 16px;
+    text-align: center;
+    margin-top: 60px;
+}
