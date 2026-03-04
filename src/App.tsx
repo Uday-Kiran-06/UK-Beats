@@ -117,31 +117,30 @@ function App() {
     }, 500); // 500ms debounce
   };
 
-  // --- MOBILE BACK BUTTON PERSISTENCE ---
+  // --- PERSISTENT HISTORY GUARD (Double Guardian) ---
+  // We use a base anchor state and a current guardian state.
+  // Any back-swipe triggers a pop to 'base', which we catch and re-push 'guardian'.
   useEffect(() => {
-    const handlePopState = () => {
-      // If we are on a sub-view, back always goes to home
-      if (currentView !== 'home') {
-        setCurrentView('home');
-        setSearchQuery('');
-        // Re-push app state to keep the guard alive
-        window.history.pushState({ isUkBeatsApp: true }, '', window.location.pathname);
-      } else {
-        // If we are on home and they hit back, we re-push to prevent app exit
-        // unless they hit back twice very fast (standard Android behavior)
-        window.history.pushState({ isUkBeatsApp: true }, '', window.location.pathname);
+    // Initial anchor
+    if (!window.history.state || window.history.state.type !== 'guardian') {
+      window.history.replaceState({ type: 'base' }, '');
+      window.history.pushState({ type: 'guardian' }, '');
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      // If we popped to the base state or out of the app, push back immediately
+      if (!event.state || event.state.type !== 'guardian') {
+        if (currentView !== 'home') {
+          setCurrentView('home');
+          setSearchQuery('');
+        }
+        // Force the user to stay in the app's 'guardian' state
+        window.history.pushState({ type: 'guardian' }, '');
       }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [currentView]);
-
-  useEffect(() => {
-    // When navigating to subviews, ensure we have a pushState history entry
-    if (currentView !== 'home') {
-      window.history.pushState({ view: currentView, isUkBeatsApp: true }, '', window.location.pathname);
-    }
   }, [currentView]);
   // ----------------------------------------
 
